@@ -1,0 +1,89 @@
+# -*- coding: utf-8 -*-
+#este si es
+"""
+Created on Mon Apr 30 15:58:14 2018
+@author: Alexa, Bri and  David
+"""
+import  rospy, os, sys, time, math, psutil
+import numpy as np
+from std_msgs.msg import String
+from sensor_msgs.msg import *
+from math import radians
+import math, serial
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+path_data = os.getcwd() + "/data/raw"
+flag=0
+angle_motor = 0
+
+dZ =0.132
+dY =0.26
+
+Arduino = serial.Serial('/dev/ttyUSB0', 9600) 
+
+class scan():
+        global flag
+        def __init__(self):
+                rospy.loginfo("Starting node")
+                rospy.Subscriber('/scan',LaserScan,self.read_data,queue_size = 1)
+                while flag==0:
+                        nop_op = 0
+
+
+        def read_data(self,data):
+                global flag, angle_motor, X,Y, Z
+
+                if angle_motor>= 360.0:
+                        flag=1
+                data_txt = str(data.ranges) +'\n' #str(datos_laser) +'$
+	        L = len(data.ranges) ##para rango de datos
+                M=np.zeros([L,1])
+                rospy.loginfo("Saving ranges")
+                rospy.loginfo("Moving motor")
+                pose = Arduino.readline()
+                angle_motor = float(pose)
+
+                for i in range(1,L):
+                        M[i,0] = data.ranges[i]
+                        s = str(M[i,0])
+                        ss = s.strip("["+"]")
+                        alfa = 0.3314917127*(i-1)-120.0
+			alfa =alfa*math.pi/180.0
+                        z = dZ +  M[i,0]*math.sin(alfa)
+                        y = dY - M[i,0]*math.cos(alfa)
+			x = 0
+			ang_mo = angle_motor*math.pi/180.0
+			X = x*math.cos(ang_mo)-y*math.sin(ang_mo)
+			Y = x*math.sin(ang_mo)+y*math.sin(ang_mo)
+			Z =z*1
+                        dataLine = str(i)+"\t"+ss+"\t"+str(angle_motor)+"\t"+str(x)+"\t"+str(y)+"\t"+str(z)+"\t"+str(X)+"\t"+str(Y)+"\t"+str(Z)+"\n"
+                        f.write(dataLine)
+                print "Loading..."+str((angle_motor*100)/360)+ "%"
+                rospy.sleep(0.2)
+                delta = 0.5
+                Arduino.write(str(delta))
+
+def saveCloud_txt(fileName):
+        fileName = fileName + "_" + time.strftime("%d-%m-%y")+'-'+time.strftime("%I-%M-%S")
+        completeName = os.path.join(path_data, fileName + '.txt')
+        print "Hola, escanearemos su objeto :)"
+        Arduino.write(str(0))
+        rospy.sleep(0.7)
+        f = open(completeName,"a") #opens file with name of "[fileName].txt"
+        dataFile = "% i"+"\t"+"Distancia"+"\t"+"Grados del motor"+"\t"+"xr"+"\t"+"yr"+"\t"+"zr"+"\t"+"xt"+"\t"+"yt"+"\t"+"zt"+"\t"+"\n" 
+        f.write(dataFile)
+        return f
+
+
+
+if __name__ == "__main__":
+
+        fileName = raw_input("Name of the pointCloud-File? : ")
+        f = saveCloud_txt(fileName)
+	try:
+     		rospy.init_node('scanner_py')
+   	        cv = scan()
+	        print "Se ha terminado el escaneo :D, mira tu objeto! "
+	except rospy.ROSInterruptException:
+		print "program interrupted before completion"
